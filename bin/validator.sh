@@ -47,7 +47,15 @@ if [[ -r ~/frozen-accounts ]]; then
   done
 fi
 
+unset EXPECTED_BANK_HASH
+unset WAIT_FOR_SUPERMAJORITY
 
+tmp_args_for_tds_restart=()
+tmp_args_for_tds_restart+=(--wait-for-supermajority 70430039)
+tmp_args_for_tds_restart+=(--no-snapshot-fetch)
+tmp_args_for_tds_restart+=(--no-genesis-fetch)
+tmp_args_for_tds_restart+=(--expected-bank-hash G4vJCyJXY1u8An6bdtoPNBdTFDwTtre7vvvKGpSyzL6q)
+tmp_args_for_tds_restart+=(--expected-shred-version 18122)
 
 args=(
   --dynamic-port-range 8002-8015
@@ -57,14 +65,15 @@ args=(
   --limit-ledger-size 50000000
   --log /data/logs/solana-validator.log
   --rpc-port 8899
-  --vote-account your-vote-account-pub-key
-  --accounts /mnt/ramdisk
+  --vote-account 46FFLfQFQt3VhSfMHykxb4n519dimLoBFJGZLeWP7KWx
+  --accounts /data/accounts
+#  ${tmp_args_for_tds_restart[@]}
 #  --enable-rpc-transaction-history
 #  --no-snapshot-fetch # do not download snapshots. remove if rebuilding takes too long
-#  --snapshot-compression none
+  --snapshot-compression none
 #  --account-shrink-path /data/ledger/accounts-shrink # <-- SSD
   --expected-genesis-hash "$EXPECTED_GENESIS_HASH"
-  --expected-shred-version "$EXPECTED_SHRED_VERSION"
+#  --expected-shred-version "$EXPECTED_SHRED_VERSION"
   --private-rpc
 #  --no-voting
 #  --cuda
@@ -74,10 +83,10 @@ args=(
   --wal-recovery-mode skip_any_corrupted_record
 )
 
-if [[ -n "$EXPECTED_BANK_HASH" ]]; then
-  args+=(--expected-bank-hash "$EXPECTED_BANK_HASH")
-  if [[ -n "$WAIT_FOR_SUPERMAJORITY" ]]; then
-    args+=(--wait-for-supermajority "$WAIT_FOR_SUPERMAJORITY")
+if [[ -n "${EXPECTED_BANK_HASH}" ]]; then
+  args+=(--expected-bank-hash "${EXPECTED_BANK_HASH}")
+  if [[ -n "${WAIT_FOR_SUPERMAJORITY}" ]]; then
+    args+=(--wait-for-supermajority "${$WAIT_FOR_SUPERMAJORITY}")
   fi
 elif [[ -n "$WAIT_FOR_SUPERMAJORITY" ]]; then
   echo "WAIT_FOR_SUPERMAJORITY requires EXPECTED_BANK_HASH be specified as well!" 1>&2
@@ -90,4 +99,5 @@ else
   args+=(--entrypoint "$ENTRYPOINT")
 fi
 
+#echo solana-validator "${args[@]}"
 exec solana-validator "${args[@]}"

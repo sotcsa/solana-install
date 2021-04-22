@@ -6,12 +6,12 @@
 set -ex
 cd ~
 
-SOLANA_VERSION=$1
+SOLANA_VERSION=${1:-v1.6.6}
 
 test -n "$SOLANA_VERSION"
 
 # Setup timezone
-sudo ln -sf /usr/share/zoneinfo/Europe/Amsterdam /etc/localtime
+#sudo ln -sf /usr/share/zoneinfo/Europe/Amsterdam /etc/localtime
 
 # Install minimal tools
 sudo apt-get update
@@ -34,18 +34,20 @@ sudo apt-get --assume-yes install \
 sudo adduser sol --gecos "" --disabled-password --quiet
 sudo adduser sol sudo
 sudo adduser sol adm
-sudo -- bash -c 'echo "sol ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers'
+#sudo -- bash -c 'echo "sol ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers'
 
 # Install solana release as the sol user
-sudo --login -u sol -- bash -c "
-  curl -sSf https://raw.githubusercontent.com/solana-labs/solana/v1.0.0/install/solana-install-init.sh | sh -s $SOLANA_VERSION
+curl -sSfL https://release.solana.com/${SOLANA_VERSION}/install > /tmp/install_solana.sh
+sudo --login -u sol -- bash /tmp/install_solana.sh
+rm -f /tmp/install_solana.sh
+
 
 sudo --login -u sol -- bash -c "
   echo ~/bin/print-keys.sh >> ~/.profile;
   cp /etc/hostname ~/.hostname;
   mkdir ~/.ssh;
   chmod 0700 ~/.ssh;
-echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMM6f3drqz3lIjuxyEnz4dhxpiBLcFJFZhjsLcmfD5Ue' >> ~/.ssh/authorized_keys;
+  echo 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCglte7ideOE59vppZojxTY1cRozzZ7aq0GieywCmt/WuLra+p3mKsPq6YTuwBXNugI0XR0X/yWut8BoXK/64YQSH2BO1i+7A0RbA3rROusG7xRSfREb/Of7hhdRZSq/dSbngDju+zG1B17i2vZUk1APsqCU49Yf+DY/ADcDw81wSTz7YjpOZOlDzOlntU5dFgqAwbquqcf6Yt66MOhrOE3cjjUFjG3nf7nuYvVUEvzwVkAyNGusbs5DoKjF9GbbJDIq8CL7v77f95DlT5+s4qMjHoppevqD5AkqLv9vTcAPbBohgnAWOakEMD5HiU1hfHf7V4wjgdnCfTI8QmNoXQJ' >> ~/.ssh/authorized_keys;
 "
 
 # Put `syslog` user in the `tty` group
@@ -54,12 +56,14 @@ echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMM6f3drqz3lIjuxyEnz4dhxpiBLcFJFZhjsLc
 sudo usermod -aG tty syslog
 sudo systemctl restart rsyslog.service
 
-# Setup log rotation
+## Setup log rotation
 cat > logrotate.sol <<EOF
 /home/sol/solana-validator.log {
   rotate 7
   daily
+  compress
   missingok
+  notifempty
   postrotate
     systemctl kill -s USR1 solana.service
   endscript
@@ -68,6 +72,8 @@ EOF
 sudo cp logrotate.sol /etc/logrotate.d/sol
 rm logrotate.sol
 
+# crating files in sol user
+cd /home/sol
 
 cat > stop <<EOF
 #!/usr/bin/env bash
@@ -127,11 +133,26 @@ solana catchup ./validator-keypair.json http://127.0.0.1:10899/
 EOF
 chmod +x catchup
 
+# Some fixes
+cd ~
+cp -r $(pwd)/solana-install/bin/ /home/sol/
+cp /root/validator-keypair.json /home/sol/validator-keypair.json
+chown sol:sol -R /home/sol/
+mkdir -p /data/{ledger,accounts}
+chown sol:sol -R /data
+
+
 # copy solana services
 sudo cp /home/sol/bin/solana-sys-tuner.service /etc/systemd/system/solana-sys-tuner.service
 sudo cp /home/sol/bin/validator.service /etc/systemd/system/solana.service
 sudo cp /home/sol/bin/watchtower.service /etc/systemd/system/watchtower.service
 sudo systemctl daemon-reload
+
+chmod 755 /home/sol/bin/*
+
+cp $(pwd)/solana-install/service-env-testnet.sh /home/sol/service-env.sh
+chmod 755 /home/sol/service-env.sh
+chown sol:sol /home/sol/service-env.sh
 
 # Start the solana-sys-tuner service
 sudo systemctl enable --now solana-sys-tuner
@@ -159,8 +180,12 @@ sudo --login -u sol -- bash -c "
 
 
 # set solana network
-solana config set --url https://api.mainnet-beta.solana.com
-solana cluster-version
+#solana config set --url https://api.mainnet-beta.solana.com
+sudo --login -u sol -- bash -c "
+  solana config set --url https://testnet.solana.com
+  solana cluster-version
+  cp /root/validator-keypair.json /home/sol/validator-keypair.json
+"
 
 # install cuda and NVidia drivers
 #wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin

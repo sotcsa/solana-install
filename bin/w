@@ -1,0 +1,1 @@
+grep WARN /data/logs/solana-validator.log
